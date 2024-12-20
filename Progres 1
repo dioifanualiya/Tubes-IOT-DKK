@@ -1,0 +1,231 @@
+#include <Arduino.h>
+#include <WiFi.h>
+#include <Firebase_ESP_Client.h>
+#include <Fuzzy.h>                  // Fuzzy Logic library
+#include <DHT.h>                    // DHT sensor library
+
+// Provide the token generation process info.
+#include "addons/TokenHelper.h"
+// Provide the RTDB payload printing info and other helper functions.
+#include "addons/RTDBHelper.h"
+
+// Wi-Fi credentials
+#define WIFI_SSID "Daryl 15 Atas"        // Ganti dengan SSID Wi-Fi Anda
+#define WIFI_PASS "tanyadaryl"             // Ganti dengan password Wi-Fi Anda
+
+// Firebase credentials
+#define API_KEY "AIzaSyDNtXAzkZutemk3wQKfVZuJ7k1DJlUCWgo"
+#define DATABASE_URL "https://data-base-tubes-default-rtdb.firebaseio.com"
+
+// Firebase objects
+FirebaseData fbdo;
+FirebaseAuth auth;
+FirebaseConfig config;
+
+unsigned long sendDataPrevMillis = 0;
+bool signupOK = false;
+
+// Sensor Pins
+#define DHT_PIN 14                // Pin DHT22
+#define SOIL_PIN 34               // Pin Sensor Kelembaban Tanah
+#define FAN_CONTROL_PIN 13        // Pin untuk kontrol kecepatan kipas (PWM)
+
+// Fuzzy Logic variables
+Fuzzy *fuzzy = new Fuzzy();
+FuzzySet *SoilVeryWet = new FuzzySet(0, 10, 20, 30);
+FuzzySet *SoilWet = new FuzzySet(20, 40, 50, 60);
+FuzzySet *SoilDry = new FuzzySet(50, 70, 80, 100);
+
+FuzzySet *AirCool = new FuzzySet(15, 20, 25, 30);
+FuzzySet *AirWarm = new FuzzySet(28, 35, 40, 45);
+FuzzySet *AirHot = new FuzzySet(43, 50, 55, 60);
+
+FuzzySet *Slow = new FuzzySet(0, 50, 100, 150);
+FuzzySet *Medium = new FuzzySet(140, 170, 200, 230);
+FuzzySet *Fast = new FuzzySet(220, 240, 255, 255);
+
+// Create DHT object
+DHT dht(DHT_PIN, DHT22);
+
+void connectToWiFi() {
+    WiFi.begin(WIFI_SSID, WIFI_PASS);
+    Serial.print("Connecting to Wi-Fi");
+
+    int retryCount = 0;
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+        retryCount++;
+        if (retryCount > 20) {
+            Serial.println("\nFailed to connect to Wi-Fi. Restarting...");
+            ESP.restart();
+        }
+    }
+
+    Serial.println("\nWi-Fi Connected");
+    Serial.print("IP Address: ");
+    Serial.println(WiFi.localIP());
+}
+
+void setup() {
+    Serial.begin(115200);
+    pinMode(FAN_CONTROL_PIN, OUTPUT);
+
+    // Initialize DHT sensor
+    dht.begin();
+
+    // Connect to Wi-Fi
+    connectToWiFi();
+
+    // Initialize Firebase
+    config.api_key = API_KEY;
+    config.database_url = DATABASE_URL;
+
+    if (Firebase.signUp(&config, &auth, "", "")) {
+        Serial.println("Firebase signup successful.");
+        signupOK = true;
+    } else {
+        Serial.printf("Firebase signup failed: %s\n", config.signer.signupError.message.c_str());
+        return;
+    }
+
+    config.token_status_callback = tokenStatusCallback;
+    Firebase.begin(&config, &auth);
+    Firebase.reconnectWiFi(true);
+
+    // Setup Fuzzy Logic Inputs
+    FuzzyInput *soilInput = new FuzzyInput(1);
+    soilInput->addFuzzySet(SoilVeryWet);
+    soilInput->addFuzzySet(SoilWet);
+    soilInput->addFuzzySet(SoilDry);
+    fuzzy->addFuzzyInput(soilInput);
+
+    FuzzyInput *airInput = new FuzzyInput(2);
+    airInput->addFuzzySet(AirCool);
+    airInput->addFuzzySet(AirWarm);
+    airInput->addFuzzySet(AirHot);
+    fuzzy->addFuzzyInput(airInput);
+
+    // Setup Fuzzy Logic Output
+    FuzzyOutput *fanSpeed = new FuzzyOutput(1);
+    fanSpeed->addFuzzySet(Slow);
+    fanSpeed->addFuzzySet(Medium);
+    fanSpeed->addFuzzySet(Fast);
+    fuzzy->addFuzzyOutput(fanSpeed);
+
+    // Adding Fuzzy Rules
+    addFuzzyRules();
+}
+
+void addFuzzyRules() {
+    // RULE 1: IF AirHot AND SoilVeryWet THEN Fast
+    FuzzyRuleAntecedent *AirHot_SoilVeryWet = new FuzzyRuleAntecedent();
+    AirHot_SoilVeryWet->joinWithAND(AirHot, SoilVeryWet);
+    FuzzyRuleConsequent *fanSpeed_Fast1 = new FuzzyRuleConsequent();
+    fanSpeed_Fast1->addOutput(Fast);
+    fuzzy->addFuzzyRule(new FuzzyRule(1, AirHot_SoilVeryWet, fanSpeed_Fast1));
+
+    // RULE 2: IF AirHot AND SoilWet THEN Medium
+    FuzzyRuleAntecedent *AirHot_SoilWet = new FuzzyRuleAntecedent();
+    AirHot_SoilWet->joinWithAND(AirHot, SoilWet);
+    FuzzyRuleConsequent *fanSpeed_Medium2 = new FuzzyRuleConsequent();
+    fanSpeed_Medium2->addOutput(Medium);
+    fuzzy->addFuzzyRule(new FuzzyRule(2, AirHot_SoilWet, fanSpeed_Medium2));
+
+    // RULE 3: IF AirHot AND SoilDry THEN Slow
+    FuzzyRuleAntecedent *AirHot_SoilDry = new FuzzyRuleAntecedent();
+    AirHot_SoilDry->joinWithAND(AirHot, SoilDry);
+    FuzzyRuleConsequent *fanSpeed_Slow3 = new FuzzyRuleConsequent();
+    fanSpeed_Slow3->addOutput(Slow);
+    fuzzy->addFuzzyRule(new FuzzyRule(3, AirHot_SoilDry, fanSpeed_Slow3));
+
+    // RULE 4: IF AirWarm AND SoilVeryWet THEN Medium
+    FuzzyRuleAntecedent *AirWarm_SoilVeryWet = new FuzzyRuleAntecedent();
+    AirWarm_SoilVeryWet->joinWithAND(AirWarm, SoilVeryWet);
+    FuzzyRuleConsequent *fanSpeed_Medium4 = new FuzzyRuleConsequent();
+    fanSpeed_Medium4->addOutput(Medium);
+    fuzzy->addFuzzyRule(new FuzzyRule(4, AirWarm_SoilVeryWet, fanSpeed_Medium4));
+
+    // RULE 5: IF AirWarm AND SoilWet THEN Medium
+    FuzzyRuleAntecedent *AirWarm_SoilWet = new FuzzyRuleAntecedent();
+    AirWarm_SoilWet->joinWithAND(AirWarm, SoilWet);
+    FuzzyRuleConsequent *fanSpeed_Medium5 = new FuzzyRuleConsequent();
+    fanSpeed_Medium5->addOutput(Medium);
+    fuzzy->addFuzzyRule(new FuzzyRule(5, AirWarm_SoilWet, fanSpeed_Medium5));
+
+    // RULE 6: IF AirWarm AND SoilDry THEN Slow
+    FuzzyRuleAntecedent *AirWarm_SoilDry = new FuzzyRuleAntecedent();
+    AirWarm_SoilDry->joinWithAND(AirWarm, SoilDry);
+    FuzzyRuleConsequent *fanSpeed_Slow6 = new FuzzyRuleConsequent();
+    fanSpeed_Slow6->addOutput(Slow);
+    fuzzy->addFuzzyRule(new FuzzyRule(6, AirWarm_SoilDry, fanSpeed_Slow6));
+
+    // RULE 7: IF AirCool AND SoilVeryWet THEN Slow
+    FuzzyRuleAntecedent *AirCool_SoilVeryWet = new FuzzyRuleAntecedent();
+    AirCool_SoilVeryWet->joinWithAND(AirCool, SoilVeryWet);
+    FuzzyRuleConsequent *fanSpeed_Slow7 = new FuzzyRuleConsequent();
+    fanSpeed_Slow7->addOutput(Slow);
+    fuzzy->addFuzzyRule(new FuzzyRule(7, AirCool_SoilVeryWet, fanSpeed_Slow7));
+
+    // RULE 8: IF AirCool AND SoilWet THEN Slow
+    FuzzyRuleAntecedent *AirCool_SoilWet = new FuzzyRuleAntecedent();
+    AirCool_SoilWet->joinWithAND(AirCool, SoilWet);
+    FuzzyRuleConsequent *fanSpeed_Slow8 = new FuzzyRuleConsequent();
+    fanSpeed_Slow8->addOutput(Slow);
+    fuzzy->addFuzzyRule(new FuzzyRule(8, AirCool_SoilWet, fanSpeed_Slow8));
+
+    // RULE 9: IF AirCool AND SoilDry THEN Slow
+    FuzzyRuleAntecedent *AirCool_SoilDry = new FuzzyRuleAntecedent();
+    AirCool_SoilDry->joinWithAND(AirCool, SoilDry);
+    FuzzyRuleConsequent *fanSpeed_Slow9 = new FuzzyRuleConsequent();
+    fanSpeed_Slow9->addOutput(Slow);
+    fuzzy->addFuzzyRule(new FuzzyRule(9, AirCool_SoilDry, fanSpeed_Slow9));
+}
+
+void loop() {
+    if (Firebase.ready() && signupOK && (millis() - sendDataPrevMillis > 15000 || sendDataPrevMillis == 0)) {
+        sendDataPrevMillis = millis();
+
+        // Read DHT sensor
+        float airTemp = dht.readTemperature();
+        float humidity = dht.readHumidity();
+        if (isnan(airTemp) || isnan(humidity)) {
+            Serial.println("Failed to read from DHT sensor!");
+            return;
+        }
+
+        // Read soil moisture sensor
+        int soilMoisture = analogRead(SOIL_PIN);
+        int soilPercentage = map(soilMoisture, 0, 1023, 0, 100);
+
+        // Fuzzify inputs
+        fuzzy->setInput(1, soilPercentage);
+        fuzzy->setInput(2, airTemp);
+        fuzzy->fuzzify();
+
+        // Get defuzzified output
+        int fanSpeedPWM = fuzzy->defuzzify(1);
+
+        // Write data to Firebase
+        if (Firebase.RTDB.setFloat(&fbdo, "/Sensors/Temperature", airTemp)) {
+            Serial.println("Temperature uploaded successfully");
+        } else {
+            Serial.printf("Failed to upload temperature: %s\n", fbdo.errorReason().c_str());
+        }
+
+        if (Firebase.RTDB.setInt(&fbdo, "/Sensors/SoilMoisturePercentage", soilPercentage)) {
+            Serial.println("Soil Moisture uploaded successfully");
+        } else {
+            Serial.printf("Failed to upload soil moisture: %s\n", fbdo.errorReason().c_str());
+        }
+
+        if (Firebase.RTDB.setInt(&fbdo, "/Sensors/FuzzyFanSpeedPWM", fanSpeedPWM)) {
+            Serial.println("Fan Speed uploaded successfully");
+        } else {
+            Serial.printf("Failed to upload fan speed: %s\n", fbdo.errorReason().c_str());
+        }
+
+        // Log to Serial Monitor
+        Serial.printf("Temperature: %.2f, Soil Moisture: %d%%, Fan Speed (PWM): %d\n", airTemp, soilPercentage, fanSpeedPWM);
+    }
+}
