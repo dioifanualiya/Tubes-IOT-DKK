@@ -1,0 +1,141 @@
+#include <Arduino.h>
+#include <Fuzzy.h> // Fuzzy Logic library
+#include <DHT.h>   // DHT sensor library
+
+// Sensor Pins
+#define DHT_PIN 14               // Pin DHT22
+#define SOIL_PIN 34              // Pin Sensor Kelembaban Tanah
+#define FAN_CONTROL_PIN 13       // Pin untuk kontrol kecepatan kipas (PWM)
+
+// Fuzzy Logic Variables
+Fuzzy *fuzzy = new Fuzzy();
+FuzzySet *SoilVeryWet = new FuzzySet(0, 0, 15, 30);
+FuzzySet *SoilWet = new FuzzySet(20, 35, 50, 50);
+FuzzySet *SoilDry = new FuzzySet(40, 55, 100, 100);
+
+FuzzySet *AirCool = new FuzzySet(0, 0, 15, 30);
+FuzzySet *AirWarm = new FuzzySet(20, 25, 35, 35);
+FuzzySet *AirHot = new FuzzySet(30, 40, 50, 50);
+
+FuzzySet *Slow = new FuzzySet(0, 50, 100, 150);
+FuzzySet *Medium = new FuzzySet(140, 170, 200, 230);
+FuzzySet *Fast = new FuzzySet(220, 240, 255, 255);
+
+// Create DHT object
+DHT dht(DHT_PIN, DHT22);
+
+void setupFuzzyRules() {
+    // RULE 1: IF AirCool AND SoilVeryWet THEN Fast
+    FuzzyRuleAntecedent *AirCool_SoilVeryWet = new FuzzyRuleAntecedent();
+    AirCool_SoilVeryWet->joinWithAND(AirCool, SoilVeryWet);
+    FuzzyRuleConsequent *fanSpeed_Fast1 = new FuzzyRuleConsequent();
+    fanSpeed_Fast1->addOutput(Fast);
+    fuzzy->addFuzzyRule(new FuzzyRule(1, AirCool_SoilVeryWet, fanSpeed_Fast1));
+
+    // Repeat for all 9 rules
+    FuzzyRuleAntecedent *AirCool_SoilWet = new FuzzyRuleAntecedent();
+    AirCool_SoilWet->joinWithAND(AirCool, SoilWet);
+    FuzzyRuleConsequent *fanSpeed_Fast2 = new FuzzyRuleConsequent();
+    fanSpeed_Fast2->addOutput(Fast);
+    fuzzy->addFuzzyRule(new FuzzyRule(2, AirCool_SoilWet, fanSpeed_Fast2));
+
+    FuzzyRuleAntecedent *AirCool_SoilDry = new FuzzyRuleAntecedent();
+    AirCool_SoilDry->joinWithAND(AirCool, SoilDry);
+    FuzzyRuleConsequent *fanSpeed_Medium3 = new FuzzyRuleConsequent();
+    fanSpeed_Medium3->addOutput(Medium);
+    fuzzy->addFuzzyRule(new FuzzyRule(3, AirCool_SoilDry, fanSpeed_Medium3));
+
+    FuzzyRuleAntecedent *AirWarm_SoilVeryWet = new FuzzyRuleAntecedent();
+    AirWarm_SoilVeryWet->joinWithAND(AirWarm, SoilVeryWet);
+    FuzzyRuleConsequent *fanSpeed_Medium4 = new FuzzyRuleConsequent();
+    fanSpeed_Medium4->addOutput(Medium);
+    fuzzy->addFuzzyRule(new FuzzyRule(4, AirWarm_SoilVeryWet, fanSpeed_Medium4));
+
+    FuzzyRuleAntecedent *AirWarm_SoilWet = new FuzzyRuleAntecedent();
+    AirWarm_SoilWet->joinWithAND(AirWarm, SoilWet);
+    FuzzyRuleConsequent *fanSpeed_Medium5 = new FuzzyRuleConsequent();
+    fanSpeed_Medium5->addOutput(Medium);
+    fuzzy->addFuzzyRule(new FuzzyRule(5, AirWarm_SoilWet, fanSpeed_Medium5));
+
+    FuzzyRuleAntecedent *AirWarm_SoilDry = new FuzzyRuleAntecedent();
+    AirWarm_SoilDry->joinWithAND(AirWarm, SoilDry);
+    FuzzyRuleConsequent *fanSpeed_Slow6 = new FuzzyRuleConsequent();
+    fanSpeed_Slow6->addOutput(Slow);
+    fuzzy->addFuzzyRule(new FuzzyRule(6, AirWarm_SoilDry, fanSpeed_Slow6));
+
+    FuzzyRuleAntecedent *AirHot_SoilVeryWet = new FuzzyRuleAntecedent();
+    AirHot_SoilVeryWet->joinWithAND(AirHot, SoilVeryWet);
+    FuzzyRuleConsequent *fanSpeed_Medium7 = new FuzzyRuleConsequent();
+    fanSpeed_Medium7->addOutput(Medium);
+    fuzzy->addFuzzyRule(new FuzzyRule(7, AirHot_SoilVeryWet, fanSpeed_Medium7));
+
+    FuzzyRuleAntecedent *AirHot_SoilWet = new FuzzyRuleAntecedent();
+    AirHot_SoilWet->joinWithAND(AirHot, SoilWet);
+    FuzzyRuleConsequent *fanSpeed_Medium8 = new FuzzyRuleConsequent();
+    fanSpeed_Medium8->addOutput(Medium);
+    fuzzy->addFuzzyRule(new FuzzyRule(8, AirHot_SoilWet, fanSpeed_Medium8));
+
+    FuzzyRuleAntecedent *AirHot_SoilDry = new FuzzyRuleAntecedent();
+    AirHot_SoilDry->joinWithAND(AirHot, SoilDry);
+    FuzzyRuleConsequent *fanSpeed_Slow9 = new FuzzyRuleConsequent();
+    fanSpeed_Slow9->addOutput(Slow);
+    fuzzy->addFuzzyRule(new FuzzyRule(9, AirHot_SoilDry, fanSpeed_Slow9));
+}
+
+void setup() {
+    Serial.begin(115200);
+    pinMode(FAN_CONTROL_PIN, OUTPUT);
+
+    // Initialize DHT sensor
+    dht.begin();
+
+    // Setup Fuzzy Logic Inputs
+    FuzzyInput *soilInput = new FuzzyInput(1);
+    soilInput->addFuzzySet(SoilVeryWet);
+    soilInput->addFuzzySet(SoilWet);
+    soilInput->addFuzzySet(SoilDry);
+    fuzzy->addFuzzyInput(soilInput);
+
+    FuzzyInput *airInput = new FuzzyInput(2);
+    airInput->addFuzzySet(AirCool);
+    airInput->addFuzzySet(AirWarm);
+    airInput->addFuzzySet(AirHot);
+    fuzzy->addFuzzyInput(airInput);
+
+    FuzzyOutput *fanSpeed = new FuzzyOutput(1);
+    fanSpeed->addFuzzySet(Slow);
+    fanSpeed->addFuzzySet(Medium);
+    fanSpeed->addFuzzySet(Fast);
+    fuzzy->addFuzzyOutput(fanSpeed);
+
+    // Setup Fuzzy Rules
+    setupFuzzyRules();
+}
+
+void loop() {
+    float tempFloat = dht.readTemperature();
+    float soilMoistureRaw = analogRead(SOIL_PIN);
+
+    if (isnan(tempFloat) || soilMoistureRaw == 0) {
+        Serial.println("Failed to read sensors!");
+        return;
+    }
+
+    int temp = round(tempFloat);
+    int soilMoisture = map(soilMoistureRaw, 3000, 0, 1, 100);
+    soilMoisture = constrain(soilMoisture, 1, 100);
+
+    // Apply Fuzzy Logic
+    fuzzy->setInput(1, soilMoisture);
+    fuzzy->setInput(2, temp);
+    fuzzy->fuzzify();
+    int fanSpeedPWM = fuzzy->defuzzify(1);
+
+    // Control fan speed
+    analogWrite(FAN_CONTROL_PIN, fanSpeedPWM);
+
+    // Debugging output
+    Serial.printf("Temperature: %d°C, Soil Moisture: %d%%, Fan Speed (PWM): %d\n", temp, soilMoisture, fanSpeedPWM);
+
+    delay(5000); // Wait for 5 seconds before next loop
+}
