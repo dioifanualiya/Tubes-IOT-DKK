@@ -236,8 +236,10 @@ void loop() {
         digitalWrite(RELAY_PIN, fanSpeedPWM);
         if (fanSpeedPWM > 0) {
             digitalWrite(RELAY_PIN, HIGH); // Turn relay ON
+            Serial.println("Relay ON.");
         } else {
             digitalWrite(RELAY_PIN, LOW); // Turn relay OFF
+            Serial.println("Relay OFF.");
         }
 
         // Firebase updates
