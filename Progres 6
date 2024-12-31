@@ -69,7 +69,7 @@ void connectToWiFi() {
 }
 
 void addFuzzyRules() {
-    // RULE 1: IF AirCool AND SoilVeryWet THEN Slow
+    // RULE 1: IF AirCool AND SoilVeryWet THEN Fast
     FuzzyRuleAntecedent *AirCool_SoilVeryWet = new FuzzyRuleAntecedent();
     AirCool_SoilVeryWet->joinWithAND(AirCool, SoilVeryWet);
     FuzzyRuleConsequent *fanSpeed_Fast1 = new FuzzyRuleConsequent();
@@ -77,7 +77,7 @@ void addFuzzyRules() {
     FuzzyRule *fuzzyRule1 = new FuzzyRule(1, AirCool_SoilVeryWet, fanSpeed_Fast1);
     fuzzy->addFuzzyRule(fuzzyRule1);
 
-    // RULE 2: IF AirCool AND SoilWet THEN Slow
+    // RULE 2: IF AirCool AND SoilWet THEN Fast
     FuzzyRuleAntecedent *AirCool_SoilWet = new FuzzyRuleAntecedent();
     AirCool_SoilWet->joinWithAND(AirCool, SoilWet);
     FuzzyRuleConsequent *fanSpeed_Fast2 = new FuzzyRuleConsequent();
@@ -109,7 +109,7 @@ void addFuzzyRules() {
     FuzzyRule *fuzzyRule5 = new FuzzyRule(5, AirWarm_SoilWet, fanSpeed_Medium5);
     fuzzy->addFuzzyRule(fuzzyRule5);
 
-    // RULE 6: IF AirWarm AND SoilDry THEN Fast
+    // RULE 6: IF AirWarm AND SoilDry THEN slow
     FuzzyRuleAntecedent *AirWarm_SoilDry = new FuzzyRuleAntecedent();
     AirWarm_SoilDry->joinWithAND(AirWarm, SoilDry);
     FuzzyRuleConsequent *fanSpeed_Slow6 = new FuzzyRuleConsequent();
@@ -125,7 +125,7 @@ void addFuzzyRules() {
     FuzzyRule *fuzzyRule7 = new FuzzyRule(7, AirHot_SoilVeryWet, fanSpeed_Medium7);
     fuzzy->addFuzzyRule(fuzzyRule7);
 
-    // RULE 8: IF AirHot AND SoilWet THEN Fast
+    // RULE 8: IF AirHot AND SoilWet THEN Slow
     FuzzyRuleAntecedent *AirHot_SoilWet = new FuzzyRuleAntecedent();
     AirHot_SoilWet->joinWithAND(AirHot, SoilWet);
     FuzzyRuleConsequent *fanSpeed_Slow8 = new FuzzyRuleConsequent();
@@ -133,7 +133,7 @@ void addFuzzyRules() {
     FuzzyRule *fuzzyRule8 = new FuzzyRule(8, AirHot_SoilWet, fanSpeed_Slow8);
     fuzzy->addFuzzyRule(fuzzyRule8);
 
-    // RULE 9: IF AirHot AND SoilDry THEN Fast
+    // RULE 9: IF AirHot AND SoilDry THEN Slow
     FuzzyRuleAntecedent *AirHot_SoilDry = new FuzzyRuleAntecedent();
     AirHot_SoilDry->joinWithAND(AirHot, SoilDry);
     FuzzyRuleConsequent *fanSpeed_Slow9 = new FuzzyRuleConsequent();
