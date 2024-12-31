@@ -81,7 +81,7 @@ void addFuzzyRules() {
     FuzzyRuleAntecedent *AirCool_SoilWet = new FuzzyRuleAntecedent();
     AirCool_SoilWet->joinWithAND(AirCool, SoilWet);
     FuzzyRuleConsequent *fanSpeed_Fast2 = new FuzzyRuleConsequent();
-    fanSpeed_Fast2->addOutput(Slow);
+    fanSpeed_Fast2->addOutput(Fast);
     FuzzyRule *fuzzyRule2 = new FuzzyRule(2, AirCool_SoilWet, fanSpeed_Fast2);
     fuzzy->addFuzzyRule(fuzzyRule2);
 
@@ -113,7 +113,7 @@ void addFuzzyRules() {
     FuzzyRuleAntecedent *AirWarm_SoilDry = new FuzzyRuleAntecedent();
     AirWarm_SoilDry->joinWithAND(AirWarm, SoilDry);
     FuzzyRuleConsequent *fanSpeed_Slow6 = new FuzzyRuleConsequent();
-    fanSpeed_Slow6->addOutput(Fast);
+    fanSpeed_Slow6->addOutput(Slow);
     FuzzyRule *fuzzyRule6 = new FuzzyRule(6, AirWarm_SoilDry, fanSpeed_Slow6);
     fuzzy->addFuzzyRule(fuzzyRule6);
 
@@ -129,7 +129,7 @@ void addFuzzyRules() {
     FuzzyRuleAntecedent *AirHot_SoilWet = new FuzzyRuleAntecedent();
     AirHot_SoilWet->joinWithAND(AirHot, SoilWet);
     FuzzyRuleConsequent *fanSpeed_Slow8 = new FuzzyRuleConsequent();
-    fanSpeed_Slow8->addOutput(Fast);
+    fanSpeed_Slow8->addOutput(Slow);
     FuzzyRule *fuzzyRule8 = new FuzzyRule(8, AirHot_SoilWet, fanSpeed_Slow8);
     fuzzy->addFuzzyRule(fuzzyRule8);
 
@@ -137,7 +137,7 @@ void addFuzzyRules() {
     FuzzyRuleAntecedent *AirHot_SoilDry = new FuzzyRuleAntecedent();
     AirHot_SoilDry->joinWithAND(AirHot, SoilDry);
     FuzzyRuleConsequent *fanSpeed_Slow9 = new FuzzyRuleConsequent();
-    fanSpeed_Slow9->addOutput(Fast);
+    fanSpeed_Slow9->addOutput(Slow);
     FuzzyRule *fuzzyRule9 = new FuzzyRule(9, AirHot_SoilDry, fanSpeed_Slow9);
     fuzzy->addFuzzyRule(fuzzyRule9);
 }
